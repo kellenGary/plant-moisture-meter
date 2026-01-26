@@ -13,6 +13,17 @@ builder.Services.AddControllers();
 // Configure to listen on all interfaces (needed for Raspberry Pi)
 builder.WebHost.UseUrls("http://0.0.0.0:5050");
 
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
 // Auto-create database on startup
@@ -21,6 +32,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<PlantMonitorContext>();
     db.Database.EnsureCreated();
 }
+
+app.UseCors("AllowAll");
 
 app.MapControllers();
 
