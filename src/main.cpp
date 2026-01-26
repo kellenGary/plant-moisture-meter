@@ -14,7 +14,7 @@ const int SENSOR_GND_PIN = 25;  // Ground pin for sensor
 #define TIME_TO_SLEEP  3600 // Sleep for 1 hour
 
 // Set to true for testing (prints every second), false for production (deep sleep)
-#define TEST_MODE true
+#define TEST_MODE false
 
 void uploadToApi(int moisturePercent) {
   HTTPClient http;
