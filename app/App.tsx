@@ -13,7 +13,7 @@ import Svg, { Circle, G, Text as SvgText } from "react-native-svg";
 
 // Update this to your Raspberry Pi's IP address
 const API_URL = "http://192.168.68.128:5050";
-const USE_DUMMY_DATA = true; // Set to false when your API is running
+const USE_DUMMY_DATA = false; // Set to false when your API is running
 
 interface SensorReading {
   id: number;
@@ -33,14 +33,19 @@ const DUMMY_LATEST: SensorReading = DUMMY_READINGS[0];
 const { width } = Dimensions.get("window");
 
 // Circular Gauge Component
-const MoistureGauge = ({ percent }: { percent: number }) => {
+const MoistureGauge = ({ percent }: { percent: number | null }) => {
   const size = Math.min(width * 0.55, 220);
   const strokeWidth = 15;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = (percent / 100) * circumference;
+
+  // If no data (percent is null), we show 0 progress but grey color
+  const hasData = percent !== null;
+  const displayPercent = hasData ? percent : 0;
+  const progress = (displayPercent / 100) * circumference;
 
   const getColor = (p: number) => {
+    if (!hasData) return "#444"; // Grey for no data
     if (p < 30) return "#e74c3c";
     if (p < 60) return "#f39c12";
     return "#27ae60";
@@ -49,7 +54,7 @@ const MoistureGauge = ({ percent }: { percent: number }) => {
   return (
     <View style={styles.gaugeContainer}>
       <Svg width={size} height={size}>
-        <G rotation="-90" origin={`${size / 2}, ${size / 2}`}>
+        <G rotation="-90" originX={size / 2} originY={size / 2}>
           {/* Background circle */}
           <Circle
             cx={size / 2}
@@ -64,11 +69,12 @@ const MoistureGauge = ({ percent }: { percent: number }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={getColor(percent)}
+            stroke={getColor(displayPercent)}
             strokeWidth={strokeWidth}
             fill="none"
             strokeDasharray={`${progress} ${circumference}`}
             strokeLinecap="round"
+            opacity={hasData ? 1 : 0.3}
           />
         </G>
         {/* Center text */}
@@ -78,9 +84,9 @@ const MoistureGauge = ({ percent }: { percent: number }) => {
           textAnchor="middle"
           fontSize={48}
           fontWeight="bold"
-          fill={getColor(percent)}
+          fill={getColor(displayPercent)}
         >
-          {percent}%
+          {hasData ? `${percent}%` : "--"}
         </SvgText>
         <SvgText
           x={size / 2}
@@ -119,13 +125,29 @@ const StatusCard = ({
 const SimpleBarChart = ({ data }: { data: SensorReading[] }) => {
   const chartData = data.slice(0, 12).reverse();
   const maxValue = 100;
-  const barWidth = (width - 80) / chartData.length - 4;
+  const barWidth = (width - 80) / Math.max(chartData.length, 1) - 4;
 
   const getColor = (p: number) => {
     if (p < 30) return "#e74c3c";
     if (p < 60) return "#f39c12";
     return "#27ae60";
   };
+
+  if (data.length === 0) {
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>Moisture Trend</Text>
+        <View
+          style={[
+            styles.chartWrapper,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <Text style={{ color: "#666" }}>No historical data available</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.chartContainer}>
@@ -183,12 +205,17 @@ export default function App() {
 
       if (latestRes.ok) {
         setLatest(await latestRes.json());
+      } else {
+        setLatest(null); // Handle 404 or other errors
       }
       if (allRes.ok) {
         setReadings(await allRes.json());
+      } else {
+        setReadings([]);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
+      // Don't clear data on transient error effectively, or maybe show error state
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -242,8 +269,11 @@ export default function App() {
     );
   }
 
-  const status = latest ? getMoistureStatus(latest.moisturePercent) : null;
+  const status = latest
+    ? getMoistureStatus(latest.moisturePercent)
+    : { text: "No Data", emoji: "❓", color: "#666" };
   const stats = getStats();
+  const hasData = !!latest;
 
   return (
     <ScrollView
@@ -262,80 +292,86 @@ export default function App() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>🌿 Plant Monitor</Text>
-        {latest && (
+        {latest ? (
           <Text style={styles.lastUpdate}>
             Updated {getTimeAgo(latest.timestamp)}
           </Text>
+        ) : (
+          <Text style={styles.lastUpdate}>Waiting for data...</Text>
         )}
       </View>
 
       {/* Main Gauge */}
-      {latest && (
-        <>
-          <MoistureGauge percent={latest.moisturePercent} />
+      <>
+        <MoistureGauge percent={latest ? latest.moisturePercent : null} />
 
-          {/* Status Banner */}
-          <View
-            style={[
-              styles.statusBanner,
-              { backgroundColor: status?.color + "20" },
-            ]}
-          >
-            <Text style={styles.statusEmoji}>{status?.emoji}</Text>
-            <Text style={[styles.statusText, { color: status?.color }]}>
-              {status?.text}
-            </Text>
-          </View>
-        </>
-      )}
+        {/* Status Banner */}
+        <View
+          style={[
+            styles.statusBanner,
+            { backgroundColor: status?.color + "20" },
+          ]}
+        >
+          <Text style={styles.statusEmoji}>{status?.emoji}</Text>
+          <Text style={[styles.statusText, { color: status?.color }]}>
+            {status?.text}
+          </Text>
+        </View>
+      </>
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
         <StatusCard
           title="Average"
-          value={`${stats.avg}%`}
+          value={hasData ? `${stats.avg}%` : "--"}
           subtitle="Last 24h"
           color="#3498db"
         />
         <StatusCard
           title="Low"
-          value={`${stats.min}%`}
+          value={hasData ? `${stats.min}%` : "--"}
           subtitle="Minimum"
           color="#e74c3c"
         />
         <StatusCard
           title="High"
-          value={`${stats.max}%`}
+          value={hasData ? `${stats.max}%` : "--"}
           subtitle="Maximum"
           color="#27ae60"
         />
       </View>
 
       {/* Chart */}
-      {readings.length > 1 && <SimpleBarChart data={readings} />}
+      <SimpleBarChart data={readings} />
 
       {/* Recent Readings */}
       <View style={styles.recentContainer}>
         <Text style={styles.recentTitle}>Recent Readings</Text>
-        {readings.slice(0, 5).map((reading) => (
-          <View key={reading.id} style={styles.readingRow}>
-            <View
-              style={[
-                styles.readingDot,
-                {
-                  backgroundColor: getMoistureStatus(reading.moisturePercent)
-                    .color,
-                },
-              ]}
-            />
-            <Text style={styles.readingPercent}>
-              {reading.moisturePercent}%
-            </Text>
-            <Text style={styles.readingTime}>
-              {getTimeAgo(reading.timestamp)}
-            </Text>
-          </View>
-        ))}
+        {readings.length === 0 ? (
+          <Text style={{ color: "#666", fontStyle: "italic" }}>
+            No recent readings recorded.
+          </Text>
+        ) : (
+          readings.slice(0, 5).map((reading) => (
+            <View key={reading.id} style={styles.readingRow}>
+              <View
+                style={[
+                  styles.readingDot,
+                  {
+                    backgroundColor: getMoistureStatus(reading.moisturePercent)
+                      .color,
+                  },
+                ]}
+              />
+              <Text style={styles.readingPercent}>
+                {reading.moisturePercent}%
+              </Text>
+              <Text style={styles.readingTime}>
+                {getTimeAgo(reading.timestamp)}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
 
       <View style={{ height: 40 }} />
