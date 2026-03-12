@@ -21,3 +21,4 @@ api/*.db-wal
 .DS_Store
 
 .env
+data/
