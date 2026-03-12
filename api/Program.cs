@@ -5,7 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure SQLite
 builder.Services.AddDbContext<PlantMonitorContext>(options =>
-    options.UseSqlite("Data Source=plant_monitor.db"));
+    options.UseSqlite("Data Source=data/plant_monitor.db"));
 
 // Add controllers
 builder.Services.AddControllers();
@@ -30,6 +30,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PlantMonitorContext>();
+    System.IO.Directory.CreateDirectory("data");
     db.Database.EnsureCreated();
 }
 

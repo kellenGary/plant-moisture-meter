@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  plant-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: plant-monitor-api
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./data:/app/data

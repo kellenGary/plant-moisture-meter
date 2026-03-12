@@ -11,25 +11,13 @@ import {
 } from "react-native";
 import Svg, { Circle, G, Text as SvgText } from "react-native-svg";
 
-// Update this to your Raspberry Pi's IP address
-const API_URL = "http://192.168.68.128:5050";
-const USE_DUMMY_DATA = false; // Set to false when your API is running
-
 interface SensorReading {
   id: number;
   moisturePercent: number;
   timestamp: string;
 }
 
-// Dummy data for development
-const DUMMY_READINGS: SensorReading[] = Array.from({ length: 24 }, (_, i) => ({
-  id: 24 - i,
-  moisturePercent: Math.floor(45 + Math.sin(i / 3) * 25 + Math.random() * 10),
-  timestamp: new Date(Date.now() - i * 3600000).toISOString(),
-}));
-
-const DUMMY_LATEST: SensorReading = DUMMY_READINGS[0];
-
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://raspberrypi.tail96d0e0.ts.net";
 const { width } = Dimensions.get("window");
 
 // Circular Gauge Component
@@ -188,15 +176,6 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
-    if (USE_DUMMY_DATA) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setLatest(DUMMY_LATEST);
-      setReadings(DUMMY_READINGS);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       const [latestRes, allRes] = await Promise.all([
         fetch(`${API_URL}/api/sensor-data/latest`),
