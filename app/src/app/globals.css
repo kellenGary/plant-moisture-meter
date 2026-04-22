@@ -1,6 +1,6 @@
 /* Base imports */
 @import "tailwindcss";
-@source "../";
+@source "../../**/*.{ts,tsx}";
 
 /* Custom dark variant for targeting dark mode elements */
 @custom-variant dark (&:is(.dark *));
