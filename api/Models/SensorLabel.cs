@@ -1,18 +1,17 @@
 namespace PlantMonitorApi.Models;
 
-public class SensorReading
+public class SensorLabel
 {
     public int Id { get; set; }
     public string BoardId { get; set; } = "";
     public int SensorId { get; set; }
-    public int MoisturePercent { get; set; }
-    public DateTime Timestamp { get; set; }
+    public string Label { get; set; } = "";
 }
 
-// DTO for incoming POST requests from ESP32
-public class SensorReadingDto
+// DTO for creating/updating sensor labels
+public class SensorLabelDto
 {
     public string BoardId { get; set; } = "";
     public int SensorId { get; set; }
-    public int MoisturePercent { get; set; }
+    public string Label { get; set; } = "";
 }

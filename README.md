@@ -2,11 +2,11 @@
 
 ## Getting Started
 
-This project consists of three main parts: a Mobile App (Frontend), an API (Backend), and Firmware for the ESP32.
+This project consists of three main parts: a Web Dashboard (Frontend), an API (Backend), and Firmware for the ESP32.
 
-### Frontend (Mobile App)
+### Frontend (Web Dashboard)
 
-The mobile app is built with React Native and Expo.
+The dashboard is built with Next.js, TypeScript, and vanilla CSS.
 
 **Location:** `app/`
 
@@ -19,22 +19,13 @@ The mobile app is built with React Native and Expo.
 
 - **Start Development Server:**
   ```bash
-  cd app && npm start
+  cd app && npm run dev
   ```
+  Opens at [http://localhost:3000](http://localhost:3000)
 
-- **Run on Android:**
+- **Production Build:**
   ```bash
-  cd app && npm run android
-  ```
-
-- **Run on iOS:**
-  ```bash
-  cd app && npm run ios
-  ```
-
-- **Run on Web:**
-  ```bash
-  cd app && npm run web
+  cd app && npm run build
   ```
 
 ### Backend (API)

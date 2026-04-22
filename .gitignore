@@ -17,8 +17,14 @@ api/*.db
 api/*.db-shm
 api/*.db-wal
 
+# Next.js
+app/.next/
+app/node_modules/
+app/out/
+
 # macOS
 .DS_Store
 
 .env
 data/
+app/.env.local

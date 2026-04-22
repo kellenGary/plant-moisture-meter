@@ -22,6 +22,8 @@ public class SensorDataController : ControllerBase
     {
         var reading = new SensorReading
         {
+            BoardId = dto.BoardId,
+            SensorId = dto.SensorId,
             MoisturePercent = dto.MoisturePercent,
             Timestamp = DateTime.UtcNow
         };
@@ -36,9 +38,21 @@ public class SensorDataController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<SensorReading>>> GetAllReadings(
         [FromQuery] int? limit = null,
+        [FromQuery] string? boardId = null,
+        [FromQuery] int? sensorId = null,
         [FromQuery] DateTime? since = null)
     {
         var query = _context.SensorReadings.AsQueryable();
+
+        if (!string.IsNullOrEmpty(boardId))
+        {
+            query = query.Where(r => r.BoardId == boardId);
+        }
+
+        if (sensorId.HasValue)
+        {
+            query = query.Where(r => r.SensorId == sensorId.Value);
+        }
 
         if (since.HasValue)
         {
@@ -56,18 +70,48 @@ public class SensorDataController : ControllerBase
     }
 
     // GET: api/sensor-data/latest
+    // Returns the latest reading for EACH unique (boardId, sensorId) pair
     [HttpGet("latest")]
-    public async Task<ActionResult<SensorReading>> GetLatest()
+    public async Task<ActionResult<IEnumerable<SensorReading>>> GetLatest()
     {
-        var reading = await _context.SensorReadings
-            .OrderByDescending(r => r.Timestamp)
-            .FirstOrDefaultAsync();
+        var latestReadings = await _context.SensorReadings
+            .GroupBy(r => new { r.BoardId, r.SensorId })
+            .Select(g => g.OrderByDescending(r => r.Timestamp).First())
+            .ToListAsync();
 
-        if (reading == null)
+        return latestReadings;
+    }
+
+    // GET: api/sensor-data/boards
+    // Returns all unique board IDs that have reported data
+    [HttpGet("boards")]
+    public async Task<ActionResult<IEnumerable<string>>> GetBoards()
+    {
+        var boards = await _context.SensorReadings
+            .Select(r => r.BoardId)
+            .Distinct()
+            .ToListAsync();
+
+        return boards;
+    }
+
+    // GET: api/sensor-data/sensors?boardId=xyz
+    // Returns all unique sensor IDs for a given board
+    [HttpGet("sensors")]
+    public async Task<ActionResult<IEnumerable<int>>> GetSensors([FromQuery] string? boardId = null)
+    {
+        var query = _context.SensorReadings.AsQueryable();
+
+        if (!string.IsNullOrEmpty(boardId))
         {
-            return NotFound();
+            query = query.Where(r => r.BoardId == boardId);
         }
 
-        return reading;
+        var sensors = await query
+            .Select(r => r.SensorId)
+            .Distinct()
+            .ToListAsync();
+
+        return sensors;
     }
 }

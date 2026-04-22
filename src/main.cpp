@@ -1,54 +1,73 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-// Credentials loaded from secrets.h (not committed to git)
+// Credentials loaded from secrets.h
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 const char* apiEndpoint = API_ENDPOINT;
 
-const int SENSOR_PIN = 32;
-const int SENSOR_VCC_PIN = 33;  // Power pin for sensor
-const int SENSOR_GND_PIN = 25;  // Ground pin for sensor
+struct SensorCluster {
+  int gndPin;
+  int vccPin;
+  int sigPin;
+};
+
+// Map of the 5 available "Direct Plug" clusters
+SensorCluster clusters[] = {
+  { -1, 13, 12 }, // Sensor 1: GND, D13, D12
+  { 14, 27, 26 }, // Sensor 2: D14, D27, D26
+  { 25, 33, 32 }, // Sensor 3: D25, D33, D32
+  { -1, 2,  15 }, // Sensor 4: GND, D2 (VCC/LED), D15 (SIGNAL) - SWAPPED
+  { 17, 16, 4  }  // Sensor 5: D17, D16, D4
+};
+
+const int NUM_SENSORS = 5;
+int readings[NUM_SENSORS];
 
 #define uS_TO_S_FACTOR 1000000ULL 
-#define TIME_TO_SLEEP  3600 // Sleep for 1 hour
+#define TIME_TO_SLEEP  3600 
+#define TEST_MODE true
 
-// Set to true for testing (prints every second), false for production (deep sleep)
-#define TEST_MODE false
-
-void uploadToApi(int moisturePercent) {
+void uploadToApi(int sensorId, int moisturePercent) {
   HTTPClient http;
   http.begin(apiEndpoint);
   http.addHeader("Content-Type", "application/json");
-  
-  String payload = "{\"moisturePercent\":" + String(moisturePercent) + "}";
-  
-  Serial.print(" -> Uploading to API... ");
-  int httpCode = http.POST(payload);
-  
-  if(httpCode == 201) {
-    Serial.println("OK!");
-  } else {
-    Serial.println("Error " + String(httpCode));
-  }
-  
+  String payload = "{\"boardId\":\"" + String(BOARD_ID) + "\", \"sensorId\":" + String(sensorId) + ", \"moisturePercent\":" + String(moisturePercent) + "}";
+  http.POST(payload);
   http.end();
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000); // Wait for serial to initialize
-  Serial.println("\n--- Plant Water Monitor Started ---");
+void readAllSensors() {
+  Serial.println("\n--- WiFi OFF: Reading Sensors ---");
+  WiFi.disconnect();
+  WiFi.mode(WIFI_OFF);
+  delay(200); // Give radio time to fully stop
 
-  // Configure power pins for sensor
-  pinMode(SENSOR_VCC_PIN, OUTPUT);
-  pinMode(SENSOR_GND_PIN, OUTPUT);
-  digitalWrite(SENSOR_VCC_PIN, HIGH);  // 3.3V power
-  digitalWrite(SENSOR_GND_PIN, LOW);   // Ground
-  delay(100); // Let sensor stabilize
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (clusters[i].gndPin != -1) {
+      pinMode(clusters[i].gndPin, OUTPUT);
+      digitalWrite(clusters[i].gndPin, LOW);
+    }
+    pinMode(clusters[i].vccPin, OUTPUT);
+    digitalWrite(clusters[i].vccPin, HIGH);
+    
+    // INCREASED DELAY: Give capacitive sensors more time to stabilize
+    delay(500); 
+    
+    int rawValue = analogRead(clusters[i].sigPin);
+    
+    // Calibrate dry value to ~3100 and wet to ~1500
+    int moisturePercent = map(rawValue, 3150, 1450, 0, 100); 
+    readings[i] = constrain(moisturePercent, 0, 100);
+    
+    digitalWrite(clusters[i].vccPin, LOW);
+    Serial.printf("Sensor %d (Pin %d): %d%% (Raw: %d)\n", i+1, clusters[i].sigPin, readings[i], rawValue);
+  }
+}
 
-  // Connect to WiFi
+void connectWiFi() {
   Serial.print("Connecting to WiFi");
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -56,52 +75,36 @@ void setup() {
     Serial.print(".");
     attempts++;
   }
-  
-  if(WiFi.status() == WL_CONNECTED) {
-    Serial.println(" Connected!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println(" Failed to connect");
-  }
+  if (WiFi.status() == WL_CONNECTED) Serial.println(" Connected!");
+  else Serial.println(" Failed!");
 }
 
-// Counter for test mode uploads
-int loopCount = 0;
-
-void loop() {
-  // Read Sensor
-  int rawValue = analogRead(SENSOR_PIN);
-  int moisturePercent = map(rawValue, 3200, 1500, 0, 100); 
-  moisturePercent = constrain(moisturePercent, 0, 100);
-
-  Serial.print("Raw: ");
-  Serial.print(rawValue);
-  Serial.print(" | Moisture: ");
-  Serial.print(moisturePercent);
-  Serial.print("%");
-
-  #if TEST_MODE
-    loopCount++;
-    // Upload every 15 seconds (15 loops)
-    if(loopCount >= 15) {
-      loopCount = 0;
-      if(WiFi.status() == WL_CONNECTED) {
-        uploadToApi(moisturePercent);
-      } else {
-        Serial.println(" -> WiFi disconnected");
-      }
-    } else {
-      Serial.println();
-    }
-    delay(1000);
-  #else
-    Serial.println();
-    // Production mode: send to API and sleep
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  if (!TEST_MODE) {
+    readAllSensors();
+    connectWiFi();
     if(WiFi.status() == WL_CONNECTED) {
-      uploadToApi(moisturePercent);
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        uploadToApi(i + 1, readings[i]);
+      }
     }
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
-  #endif
+  }
+}
+
+void loop() {
+  if (TEST_MODE) {
+    readAllSensors();
+    connectWiFi();
+    if (WiFi.status() == WL_CONNECTED) {
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        uploadToApi(i + 1, readings[i]);
+      }
+    }
+    Serial.println("Next reading in 10 seconds...");
+    delay(10000); 
+  }
 }
